@@ -1,0 +1,53 @@
+name: Delete workflow runs and artifacts
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete all workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner="zhongdaiqi"
+          repo="flutter-ohos-app-template"
+
+          echo "Listing workflow runs..."
+          ids=$(gh api "repos/${owner}/${repo}/actions/runs" --paginate --jq '.workflow_runs[].id' || true)
+
+          if [ -z "$ids" ]; then
+            echo "No workflow runs found."
+          else
+            echo "$ids" | while read -r id; do
+              [ -n "$id" ] || continue
+              echo "Deleting workflow run: $id"
+              gh api -X DELETE "repos/${owner}/${repo}/actions/runs/${id}" || true
+            done
+          fi
+
+      - name: Delete all artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner="zhongdaiqi"
+          repo="flutter-ohos-app-template"
+
+          echo "Listing artifacts..."
+          ids=$(gh api "repos/${owner}/${repo}/actions/artifacts" --paginate --jq '.artifacts[].id' || true)
+
+          if [ -z "$ids" ]; then
+            echo "No artifacts found."
+          else
+            echo "$ids" | while read -r id; do
+              [ -n "$id" ] || continue
+              echo "Deleting artifact: $id"
+              gh api -X DELETE "repos/${owner}/${repo}/actions/artifacts/${id}" || true
+            done
+          fi
