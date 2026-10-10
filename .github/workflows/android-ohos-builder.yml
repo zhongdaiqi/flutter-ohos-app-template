@@ -1,0 +1,118 @@
+name: Build with flutter-ohos-builder
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write          # required to publish the build log to ci-diagnostics
+    steps:
+      - uses: actions/checkout@v4
+
+      # Freeing dotnet/android/ghc is harmless, but the docker prune below is NOT:
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Probe entrypoint directly (capture hidden stderr)
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "---- all docker images ----"
+            docker image ls --format '{{.ID}}  {{.Repository}}:{{.Tag}}  ({{.Size}})'
+            IMG=$(docker images -q | head -1)
+            echo "probe image id: ${IMG:-NONE}"
+            if [[ -z "${IMG}" ]]; then
+              echo "PROBE_EXIT=skipped (no image listed)"
+              exit 0
+            fi
+            set +e
+            docker run --rm \
+              -e GITHUB_WORKSPACE=/github/workspace \
+              -v "${GITHUB_WORKSPACE}:/github/workspace" \
+              --entrypoint /bin/bash "${IMG}" \
+              -c 'timeout 15 /entrypoint.sh --build-mode debug --build-target hap --flutter-version 3.41.10-ohos-1.0.1 --ohos-api 26 2>&1 | head -n 60; echo PROBE_EXIT=$?'
+            set -e
+          } > entrypoint-probe.log 2>&1
+          cat entrypoint-probe.log
+          echo "---- files left in workspace ----"
+          ls -la flutter-ohos-build.log 2>/dev/null || echo "(no log file)"
+
+      - name: Build package (HarmonyOS or Android)
+        id: build
+        uses: zhongdaiqi/flutter-ohos-builder@main
+        with:
+          flutter-version: '3.41.10-ohos-1.0.1'
+          ohos-api: '26'
+          bundle-name: 'com.zhongdaiqi.app'
+          app-name: 'flutter-ohos-app-template'
+
+          # Decide target:
+          # - If Android keystore present -> android
+          # - Else if OHOS keystore present -> app (release)
+          # - Else -> hap (debug)
+          build-target: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'android' || (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' && 'app') || 'hap' }}
+
+          # build-mode: release when a keystore for the chosen platform exists, otherwise debug
+          build-mode: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'release' || (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' && 'release') || 'debug' }}
+
+          # OHOS signing inputs (use only OHOS_*- secrets)
+          ohos-sign-enabled: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '') && 'true' || 'false' }}
+          ohos-sign-alg: ${{ secrets.OHOS_SIGN_ALG || 'SHA256withECDSA' }}
+          ohos-sign-key-alias: ${{ secrets.OHOS_SIGN_KEY_ALIAS }}
+          ohos-sign-key-password: ${{ secrets.OHOS_SIGN_KEY_PASSWORD }}
+          ohos-sign-store-password: ${{ secrets.OHOS_SIGN_STORE_PASSWORD }}
+          ohos-sign-cert-base64: ${{ secrets.OHOS_SIGN_CERT_BASE64 }}
+          ohos-sign-profile-base64: ${{ secrets.OHOS_SIGN_PROFILE_BASE64 }}
+          ohos-sign-store-file-base64: ${{ secrets.OHOS_SIGN_STORE_FILE_BASE64 }}
+          ohos-sign-material-base64: ${{ secrets.OHOS_SIGN_MATERIAL_BASE64 }}
+
+          # Android signing inputs (use only ANDROID_* secrets)
+          android-sign-enabled: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'true' || 'false' }}
+          android-sign-key-alias: ${{ secrets.ANDROID_SIGN_KEY_ALIAS }}
+          android-sign-key-password: ${{ secrets.ANDROID_SIGN_KEY_PASSWORD }}
+          android-sign-store-base64: ${{ secrets.ANDROID_STORE_BASE64 }}
+          android-sign-store-password: ${{ secrets.ANDROID_STORE_PASSWORD }}
+
+      - name: Show build log
+        if: always()
+        run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log produced)'
+
+      - name: Publish build log to ci-diagnostics branch
+        if: always()
+        continue-on-error: true
+        run: |
+          git config user.name  "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          mkdir -p .ci
+          cp flutter-ohos-build.log .ci/build.log 2>/dev/null || echo '(no build log produced)' > .ci/build.log
+          cp entrypoint-probe.log .ci/probe.log 2>/dev/null || echo '(no probe log)' > .ci/probe.log
+          git add -f .ci/build.log .ci/probe.log
+          git commit -m "ci: build log for ${GITHUB_SHA}" || echo "nothing to commit"
+          git push origin HEAD:refs/heads/ci-diagnostics --force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-output
+          path: |
+            # HarmonyOS outputs
+            ohos/entry/build/default/outputs/default/*.hap
+            ohos/build/outputs/default/*.app
+            # Android outputs
+            android/app/build/outputs/apk/**/*.apk
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7
