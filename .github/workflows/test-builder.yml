@@ -99,7 +99,7 @@ jobs:
           # (material/fd/{0,1,2} + material/ac + material/ce on the machine that
           # produced the keystore). Without it SignHap fails with
           # "ENOENT ... stat '<dir>/material'" (Error Code 00308018).
-          sign-material-base64: ${{ secrets.OHOS_SIGN_MATERIAL_BASE64 || secrets.SIGN_MATERIAL_BASE64 }}
+          ohos-sign-material-base64: ${{ secrets.OHOS_SIGN_MATERIAL_BASE64 || secrets.SIGN_MATERIAL_BASE64 }}
 
       # SECURITY POLICY: the generated ohos/ is NEVER committed back to main and
       # is NOT uploaded as an artifact either - it is fully reproducible with
