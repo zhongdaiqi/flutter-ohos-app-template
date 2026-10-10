@@ -15,13 +15,14 @@ Use this template to start a new Flutter + HarmonyOS project with CI/CD pre-conf
 请在仓库 Settings → Secrets and variables → Actions 中按精确名称添加下列 Secrets：
 
 - `OHOS_SIGN_ALG`
+  - 示例值（推荐）：`SHA256withECDSA`
 - `OHOS_SIGN_CERT_BASE64`        # .cer 文件，single-line base64
 - `OHOS_SIGN_KEY_ALIAS`
 - `OHOS_SIGN_KEY_PASSWORD`
 - `OHOS_SIGN_PROFILE_BASE64`     # .p7b 文件，single-line base64
 - `OHOS_SIGN_STORE_FILE_BASE64`  # .p12 keystore，single-line base64
 - `OHOS_SIGN_STORE_PASSWORD`
-- `OHOS_SIGN_MATERIAL_BASE64`    # DevEco 生成的 material/ 目录�� zip，single-line base64
+- `OHOS_SIGN_MATERIAL_BASE64`    # DevEco 生成的 material/ 目录的 zip，single-line base64
 
 重要提示：仓库不再支持旧的 `SIGN_*` 命名，请统一使用 `OHOS_SIGN_*`。
 
@@ -31,59 +32,56 @@ DevEco/hvigor 在生成并加密 keystore (.p12) 时，会在 .p12 同级生成�
 
 ## 生成并验证 base64 的示例命令
 
-### 1) 单个文件生成 single-line base64
+（本节已在 README 中保留，示例步骤用于生成 single-line base64 和验证。你可以参考已有内容。）
 
-Linux:
+## Secrets 的来源说明（华为后台 / 本地生成）
 
-```bash
-base64 -w0 app.cer > app.cer.base64
-base64 -w0 app.p7b > app.p7b.base64
-base64 -w0 app.p12 > app.p12.base64
-```
+以下配置来自两个典型来源：
 
-macOS:
+1) 华为开发者后台 / AppGallery Connect / 发布签名侧
+2) 本地 DevEco Studio / 生成 keystore 的机器
 
-```bash
-base64 app.cer | tr -d '\n' > app.cer.base64
-base64 app.p7b | tr -d '\n' > app.p7b.base64
-base64 app.p12 | tr -d '\n' > app.p12.base64
-```
+下面按每个 Secret 说明其典型来源与获取位置。
 
-注意：将产生的 `.base64` 文件内容（单行）复制到 GitHub secret 的值中。
+### 1) 来自华为开发者后台 / AppGallery Connect / 发布管理
+#### OHOS_SIGN_CERT_BASE64
+- 典型来源：华为开发者后台 → 应用 / 项目 → 证书管理 / 签名证书 / 发布证书
+- 常见获取方式：在应用的发布或签名配置页面中，下载 `.cer` 证书文件
 
-### 2) material/ 目录打包并生成 base64
+#### OHOS_SIGN_PROFILE_BASE64
+- 典型来源：华为开发者后台 → 应用 / 发布配置 / 配置文件 / Profile / 签名配置
+- 常见获取方式：从发布签名配置页面导出或下载 `.p7b` / Profile 配置文件
 
-在包含 `material/` 的父目录运行：
+#### OHOS_SIGN_ALG
+- 典型来源：证书或签名配置页面中声明的签名算法
+- 常见值举例（示例）：`SHA256withECDSA`（若证书为 ECDSA）或 `SHA256withRSA`（若为 RSA）
 
-```bash
-zip -r material.zip material/
-base64 -w0 material.zip > material.zip.base64  # Linux
-# macOS:
-# base64 material.zip | tr -d '\n' > material.zip.base64
-```
+### 2) 来自本地 DevEco Studio / 生成 keystore 的机器
+#### OHOS_SIGN_STORE_FILE_BASE64
+- 典型来源：本地生成的 `.p12` / `.pfx` keystore 文件，由 DevEco Studio 或证书管理员导出
 
-验证：
+#### OHOS_SIGN_KEY_ALIAS
+- 典型来源：生成 `.p12` 时设置的 alias，记录于生成者处或 DevEco 的签名配置里
 
-```bash
-base64 -d material.zip.base64 > tmp_material.zip
-unzip -l tmp_material.zip
-```
+#### OHOS_SIGN_KEY_PASSWORD
+- 典型来源：alias 的密码，由生成 keystore 的人设定并安全传递
 
-输出必须包含以 `material/` 为顶层目录的条目（例如 `material/fd/0`、`material/ac` 等），否则 CI 会报错。
+#### OHOS_SIGN_STORE_PASSWORD
+- 典型来源：`.p12` keystore 的密码，由生成 keystore 的人设定并安全传递
 
-## 常见故障与排查要点（中文）
+#### OHOS_SIGN_MATERIAL_BASE64
+- 典型来源：生成 `.p12` 的机器上与 `.p12` 同目录下的 `material/` 目录（由 DevEco/hvigor 生成）
+- 获取方式：必须在生成 `.p12` 的本地环境打包 `material/` 并以受控方式提供（推荐生成���直接在仓库 Secrets 中添加该值或使用内部安全存储与短期凭证）
 
-- 错误：`ERROR: sign material is missing`
-  - 排查：确认 `OHOS_SIGN_MATERIAL_BASE64` 是否存在于 Actions Secrets，且为 single-line base64；本地用 `unzip -l` 校验 zip 内容是否包含 `material/` 顶层目录。
+### 谁提供这些值
+- 证书管理员 / 发布负责人：负责提供 `OHOS_SIGN_CERT_BASE64`、`OHOS_SIGN_PROFILE_BASE64`、`OHOS_SIGN_ALG`
+- Keystore 生成者 / 签名工程师：负责提供 `.p12`、alias、密码、material
+- CI / DevOps：负责将这些值写入仓库 Actions Secrets，并验证 CI 构建
 
-- 错误：`Init keystore failed` 或 `toDerInputStream rejects tag type 80`
-  - 排查：说明 `OHOS_SIGN_STORE_FILE_BASE64` 可能不是正确的 `.p12` 文件，或对应密码 `OHOS_SIGN_STORE_PASSWORD` 错误。请确认上传的是原始 `.p12` 的 base64 编码。
-
-- Secret 放置位置错误：
-  - 请确保 Secrets 放在仓库级别的 Actions Secrets（Settings → Secrets and variables → Actions），不要放到 Variables 或未审批的 Environment（未审批的 Environment 下，workflow 无法读取 secrets）。
-
-- secret 值有换行或被截断：
-  - 复制到 GitHub secret 时请确保粘贴为单行且没有被自动换行或截断。
+### 安全建议
+- `.p12`、`material/`、密码等为高敏感内容，禁止通过公共聊天/邮件明文传输。
+- 建议由生成者直接在仓库 Secrets 中添加或使用公司受控存储与短期凭证供 CI 下载。
+- 不在日志中打印密码或 keystore 内容。
 
 ---
 
