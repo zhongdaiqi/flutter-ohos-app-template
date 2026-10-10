@@ -111,8 +111,8 @@ jobs:
             # HarmonyOS outputs
             ohos/entry/build/default/outputs/default/*.hap
             ohos/build/outputs/default/*.app
-            # Android outputs
-            android/app/build/outputs/apk/**/*.apk
+            # Android outputs (flutter build apk writes here)
+            build/app/outputs/flutter-apk/**/*.apk
             flutter-ohos-build.log
           if-no-files-found: warn
           retention-days: 7
