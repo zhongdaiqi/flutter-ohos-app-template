@@ -1,0 +1,43 @@
+---- all docker images ----
+54d050428e1f  64d054:d1ea6d0d795a40e0a602b9a422904f90  (9.24GB)
+70d716031cd8  ghcr.io/github/github-mcp-server:latest  (47.1MB)
+226ed17086e9  ghcr.io/dependabot/dependabot-updater-core:latest  (835MB)
+a589ff70a202  ghcr.io/github/gh-aw-mcpg:latest  (181MB)
+d1d510080c4d  ghcr.io/github/gh-aw-firewall/agent:latest  (547MB)
+6b335d6fe22a  ghcr.io/github/gh-aw-firewall/api-proxy:latest  (207MB)
+22967111f281  ghcr.io/github/gh-aw-firewall/squid:latest  (43.1MB)
+probe image id: 54d050428e1f
+================================
+  Flutter OHOS Builder
+================================
+Flutter version: 3.41.10-ohos-1.0.1
+OHOS API: 26
+Build mode: debug
+Build target: hap
+Project path: .
+bundleName: (not set - keep whatever flutter create generated)
+appName: (not set)
+OHOS signing enabled: false
+Android signing enabled: false
+Workspace: /github/workspace
+Log file: /github/workspace/flutter-ohos-build.log
+================================
+Working dir: /github/workspace
+total 48
+drwxr-xr-x 5 1001 1001  4096 Oct 10 19:08 .
+drwxr-xr-x 3 root root  4096 Oct 10 19:08 ..
+drwxr-xr-x 7 1001 1001  4096 Oct 10 19:07 .git
+drwxr-xr-x 3 1001 1001  4096 Oct 10 19:07 .github
+-rw-r--r-- 1 1001 1001   130 Oct 10 19:07 .gitignore
+-rw-r--r-- 1 1001 1001  1067 Oct 10 19:07 LICENSE
+-rw-r--r-- 1 1001 1001 10335 Oct 10 19:07 README.md
+-rw-r--r-- 1 1001 1001   517 Oct 10 19:08 entrypoint-probe.log
+-rw-r--r-- 1 root root     0 Oct 10 19:08 flutter-ohos-build.log
+drwxr-xr-x 2 1001 1001  4096 Oct 10 19:07 lib
+-rw-r--r-- 1 1001 1001   314 Oct 10 19:07 pubspec.yaml
+[1/4] Checking Flutter environment...
+Downloading Linux x64 Dart SDK from Flutter engine 3fb08d34b6f96a15fbb219b903c9d0ab37b6c2e0...
+dart-sdk-url: https://flutter-ohos.obs.cn-south-1.myhuaweicloud.com/flutter_infra_release/flutter/3fb08d34b6f96a15fbb219b903c9d0ab37b6c2e0/dart-sdk-linux-x64.zip
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0  193M    0  128k    0     0  69747      0  0:48:31  0:00:01  0:48:30 69719  0  193M    0 1032k    0     0   357k      0  0:09:14  0:00:02  0:09:12  357k  2  193M    2 5544k    0     0  1428k      0  0:02:18  0:00:03  0:02:15 1428k  6  193M    6 11.6M    0     0  2429k      0  0:01:21  0:00:04  0:01:17 2429k  9  193M    9 18.4M    0     0  3212k      0  0:01:01  0:00:05  0:00:56 3846k 12  193M   12 24.1M    0     0  3592k      0  0:00:55  0:00:06  0:00:49 4914k 16  193M   16 31.0M    0     0  3984k      0  0:00:49  0:00:07  0:00:42 6039k 19  193M   19 37.1M    0     0  4283k      0  0:00:46  0:00:08  0:00:38 6500k 22  193M   22 43.4M    0     0  4473k      0  0:00:44  0:00:09  0:00:35 6474k 25  193M   25 49.6M    0     0  4674k      0  0:00:42  0:00:10  0:00:32 6392k 28  193M   28 55.7M    0     0  4793k      0  0:00:41  0:00:11  0:00:30 6445k 32  193M   32 62.6M    0     0  4933k      0  0:00:40  0:00:12  0:00:28 6444k 35  193M   35 68.3M    0     0  5040k      0  0:00:39  0:00:13  0:00:26 6385kPROBE_EXIT=0
