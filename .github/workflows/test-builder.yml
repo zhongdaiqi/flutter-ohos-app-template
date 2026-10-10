@@ -1,0 +1,140 @@
+name: Build with flutter-ohos-builder
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write          # required to publish the build log to ci-diagnostics
+    steps:
+      - uses: actions/checkout@v4
+
+      # Freeing dotnet/android/ghc is harmless, but the docker prune below is NOT:
+      # step 2 already built the action image, and `docker image prune -af` deletes
+      # every image without a container - including that one. The action step then
+      # fails within a second with "no such image", and the message only lives in
+      # the step log we cannot read back. So no docker prune on this job, ever.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      # One build step that adapts to what you have configured:
+      #   keystore secret absent -> unsigned debug .hap  (proves the toolchain)
+      #   keystore secret present -> signed release .app (shippable package)
+      # The switch fires on the keystore secret (SIGN_STORE_BASE64 or the legacy
+      # OHOS_SIGN_STORE_FILE_BASE64 name), and `secrets.*` is readable in `with:`.
+      # Secret names verified against repo Settings -> Secrets via API on 2026-10-10:
+      #   SIGN_ALG, SIGN_CERT_BASE64, SIGN_KEY_ALIAS, SIGN_KEY_PASSWORD,
+      #   SIGN_PROFILE_BASE64, SIGN_STORE_BASE64, SIGN_STORE_PASSWORD
+      # (the run for 7d8b932a silently degraded to unsigned debug because an
+      # earlier draft referenced OHOS_SIGN_* names that do not exist).
+      # The docker action hides container stderr inside its step log, which is not
+      # readable through the REST API without actions:read. Step 2 above ALREADY built
+      # the image (that's what "Build ...@main" does for docker actions), so we can run
+      # the entrypoint ourselves for 15 seconds and capture whatever GitHub refuses to
+      # show us. Cheap (image is warm) and decisive.
+      - name: Probe entrypoint directly (capture hidden stderr)
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "---- all docker images ----"
+            docker image ls --format '{{.ID}}  {{.Repository}}:{{.Tag}}  ({{.Size}})'
+            # Use the IMAGE ID, never a name reference - GitHub tags the action image
+            # with a path-like name that breaks `docker run` reference parsing.
+            IMG=$(docker images -q | head -1)
+            echo "probe image id: ${IMG:-NONE}"
+            if [[ -z "${IMG}" ]]; then
+              echo "PROBE_EXIT=skipped (no image listed)"
+              exit 0
+            fi
+            set +e
+            docker run --rm \
+              -e GITHUB_WORKSPACE=/github/workspace \
+              -v "${GITHUB_WORKSPACE}:/github/workspace" \
+              --entrypoint /bin/bash "${IMG}" \
+              -c 'timeout 15 /entrypoint.sh --build-mode debug --build-target hap --flutter-version 3.41.10-ohos-1.0.1 --ohos-api 26 2>&1 | head -n 60; echo PROBE_EXIT=$?'
+            set -e
+          } > entrypoint-probe.log 2>&1
+          cat entrypoint-probe.log
+          echo "---- files left in workspace ----"
+          ls -la flutter-ohos-build.log 2>/dev/null || echo "(no log file)"
+
+      - name: Build HarmonyOS package
+        id: build
+        uses: zhongdaiqi/flutter-ohos-builder@main
+        with:
+          flutter-version: '3.41.10-ohos-1.0.1'
+          ohos-api: '26'
+          bundle-name: 'com.zhongdaiqi.app'
+          app-name: 'flutter-ohos-app-template'
+          # Signing secret names - two naming schemes are accepted so the switch
+          # works with either set configured on the repo:
+          #   OHOS_SIGN_*  (original scheme used by this workflow)
+          #   SIGN_*       (scheme the repo owner configured: SIGN_ALG,
+          #                 SIGN_CERT_BASE64, SIGN_KEY_ALIAS, SIGN_KEY_PASSWORD,
+          #                 SIGN_PROFILE_BASE64, SIGN_STORE_BASE64, SIGN_STORE_PASSWORD)
+          build-mode: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' || secrets.SIGN_STORE_BASE64 != '') && 'release' || 'debug' }}
+          build-target: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' || secrets.SIGN_STORE_BASE64 != '') && 'app' || 'hap' }}
+          sign-enabled: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' || secrets.SIGN_STORE_BASE64 != '') && 'true' || 'false' }}
+          sign-alg: ${{ secrets.OHOS_SIGN_ALG || secrets.SIGN_ALG || 'SHA256withECDSA' }}
+          sign-key-alias: ${{ secrets.OHOS_SIGN_KEY_ALIAS || secrets.SIGN_KEY_ALIAS }}
+          sign-key-password: ${{ secrets.OHOS_SIGN_KEY_PASSWORD || secrets.SIGN_KEY_PASSWORD }}
+          sign-store-password: ${{ secrets.OHOS_SIGN_STORE_PASSWORD || secrets.SIGN_STORE_PASSWORD }}
+          sign-cert-base64: ${{ secrets.OHOS_SIGN_CERT_BASE64 || secrets.SIGN_CERT_BASE64 }}
+          sign-profile-base64: ${{ secrets.OHOS_SIGN_PROFILE_BASE64 || secrets.SIGN_PROFILE_BASE64 }}
+          sign-store-file-base64: ${{ secrets.OHOS_SIGN_STORE_FILE_BASE64 || secrets.SIGN_STORE_BASE64 }}
+          # 8th secret: ZIP of the DevEco material/ directory that sits next to the
+          # .p12 and is required to decrypt the encrypted key/store passwords
+          # (material/fd/{0,1,2} + material/ac + material/ce on the machine that
+          # produced the keystore). Without it SignHap fails with
+          # "ENOENT ... stat '<dir>/material'" (Error Code 00308018).
+          sign-material-base64: ${{ secrets.OHOS_SIGN_MATERIAL_BASE64 || secrets.SIGN_MATERIAL_BASE64 }}
+
+      # SECURITY POLICY: the generated ohos/ is NEVER committed back to main and
+      # is NOT uploaded as an artifact either - it is fully reproducible with
+      # `flutter create` / `flutter build hap`. When signing is enabled the
+      # builder writes keyPassword/storePassword in plaintext into
+      # ohos/build-profile.json5 inside the ephemeral CI workspace; keeping it
+      # out of git history and artifacts keeps those passwords non-persistent.
+      # The build outputs (.hap/.app) below are the only deliverable, and signed
+      # packages are fine to distribute - they are the shippable product.
+
+      - name: Show build log
+        if: always()
+        run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log produced)'
+
+      - name: Publish build log to ci-diagnostics branch
+        if: always()
+        continue-on-error: true
+        run: |
+          git config user.name  "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          mkdir -p .ci
+          cp flutter-ohos-build.log .ci/build.log 2>/dev/null || echo '(no build log produced)' > .ci/build.log
+          cp entrypoint-probe.log .ci/probe.log 2>/dev/null || echo '(no probe log)' > .ci/probe.log
+          git add -f .ci/build.log .ci/probe.log
+          git commit -m "ci: build log for ${GITHUB_SHA}" || echo "nothing to commit"
+          git push origin HEAD:refs/heads/ci-diagnostics --force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: harmonyos-build
+          path: |
+            ohos/entry/build/default/outputs/default/*.hap
+            ohos/build/outputs/default/*.app
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7
