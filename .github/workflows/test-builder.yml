@@ -86,14 +86,14 @@ jobs:
           #                 SIGN_PROFILE_BASE64, SIGN_STORE_BASE64, SIGN_STORE_PASSWORD)
           build-mode: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' || secrets.SIGN_STORE_BASE64 != '') && 'release' || 'debug' }}
           build-target: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' || secrets.SIGN_STORE_BASE64 != '') && 'app' || 'hap' }}
-          sign-enabled: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' || secrets.SIGN_STORE_BASE64 != '') && 'true' || 'false' }}
-          sign-alg: ${{ secrets.OHOS_SIGN_ALG || secrets.SIGN_ALG || 'SHA256withECDSA' }}
-          sign-key-alias: ${{ secrets.OHOS_SIGN_KEY_ALIAS || secrets.SIGN_KEY_ALIAS }}
-          sign-key-password: ${{ secrets.OHOS_SIGN_KEY_PASSWORD || secrets.SIGN_KEY_PASSWORD }}
-          sign-store-password: ${{ secrets.OHOS_SIGN_STORE_PASSWORD || secrets.SIGN_STORE_PASSWORD }}
-          sign-cert-base64: ${{ secrets.OHOS_SIGN_CERT_BASE64 || secrets.SIGN_CERT_BASE64 }}
-          sign-profile-base64: ${{ secrets.OHOS_SIGN_PROFILE_BASE64 || secrets.SIGN_PROFILE_BASE64 }}
-          sign-store-file-base64: ${{ secrets.OHOS_SIGN_STORE_FILE_BASE64 || secrets.SIGN_STORE_BASE64 }}
+          ohos-sign-enabled: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '' || secrets.SIGN_STORE_BASE64 != '') && 'true' || 'false' }}
+          ohos-sign-alg: ${{ secrets.OHOS_SIGN_ALG || secrets.SIGN_ALG || 'SHA256withECDSA' }}
+          ohos-sign-key-alias: ${{ secrets.OHOS_SIGN_KEY_ALIAS || secrets.SIGN_KEY_ALIAS }}
+          ohos-sign-key-password: ${{ secrets.OHOS_SIGN_KEY_PASSWORD || secrets.SIGN_KEY_PASSWORD }}
+          ohos-sign-store-password: ${{ secrets.OHOS_SIGN_STORE_PASSWORD || secrets.SIGN_STORE_PASSWORD }}
+          ohos-sign-cert-base64: ${{ secrets.OHOS_SIGN_CERT_BASE64 || secrets.SIGN_CERT_BASE64 }}
+          ohos-sign-profile-base64: ${{ secrets.OHOS_SIGN_PROFILE_BASE64 || secrets.SIGN_PROFILE_BASE64 }}
+          ohos-sign-store-file-base64: ${{ secrets.OHOS_SIGN_STORE_FILE_BASE64 || secrets.SIGN_STORE_BASE64 }}
           # 8th secret: ZIP of the DevEco material/ directory that sits next to the
           # .p12 and is required to decrypt the encrypted key/store passwords
           # (material/fd/{0,1,2} + material/ac + material/ce on the machine that
