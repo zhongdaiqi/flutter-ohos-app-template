@@ -26,13 +26,72 @@ Use this template to start a new Flutter + HarmonyOS project with CI/CD pre-conf
 
 重要提示：仓库不再支持旧的 `SIGN_*` 命名，请统一使用 `OHOS_SIGN_*`。
 
-为什么需要 `OHOS_SIGN_MATERIAL_BASE64`
+## Secrets 与 build-profile.json5 的实际对应关系
+
+这些 GitHub Actions Secrets 最终会被注入到 `ohos/build-profile.json5` 中的 `signingConfigs` 节点，用于告诉 hvigor / DevEco 运行签名时如何使用证书、keystore、profile 和 material。
+
+对应结构大致如下：
+
+```json5
+{
+  "signingConfigs": [
+    {
+      "name": "default",
+      "type": "HarmonyOS",
+      "material": {
+        "certpath": "/tmp/ohos-sign/app.cer",
+        "keyAlias": "YOUR_KEY_ALIAS",
+        "keyPassword": "YOUR_KEY_PASSWORD",
+        "profile": "/tmp/ohos-sign/app.p7b",
+        "signAlg": "SHA256withECDSA",
+        "storeFile": "/tmp/ohos-sign/app.p12",
+        "storePassword": "YOUR_STORE_PASSWORD"
+      }
+    }
+  ]
+}
+```
+
+也就是说，每个 Secret 实际会映射到以下字段：
+
+- `OHOS_SIGN_ALG`
+  - 对应：`signingConfigs[].material.signAlg`
+  - 例子：`SHA256withECDSA`
+
+- `OHOS_SIGN_CERT_BASE64`
+  - 对应：`signingConfigs[].material.certpath`
+  - 具体作用：脚本会把它解码为 `/tmp/ohos-sign/app.cer`，然后写入 `certpath`
+
+- `OHOS_SIGN_KEY_ALIAS`
+  - 对应：`signingConfigs[].material.keyAlias`
+
+- `OHOS_SIGN_KEY_PASSWORD`
+  - 对应：`signingConfigs[].material.keyPassword`
+
+- `OHOS_SIGN_PROFILE_BASE64`
+  - 对应：`signingConfigs[].material.profile`
+  - 具体作用：脚本会把它解码为 `/tmp/ohos-sign/app.p7b`，然后写入 `profile`
+
+- `OHOS_SIGN_STORE_FILE_BASE64`
+  - 对应：`signingConfigs[].material.storeFile`
+  - 具体作用：脚本会把它解码为 `/tmp/ohos-sign/app.p12`，然后写入 `storeFile`
+
+- `OHOS_SIGN_STORE_PASSWORD`
+  - 对应：`signingConfigs[].material.storePassword`
+
+- `OHOS_SIGN_MATERIAL_BASE64`
+  - 不是直接写入 `build-profile.json5` 的一个字段
+  - 而是：被脚本解码为 `material.zip`，随后 `unzip` 到 `material/` 目录，供 hvigor 在签名阶段读取
+  - 它是配套签名材料的一部分，帮助解密存储在 keystore 中的加密密码和签名依赖文件
+
+补充说明（最重要）：
+- 这几个值不是“随便写字符串”，它们最终都要对应到 `material` 结构中的具体字段。
+- `material` 目录的作用不是展示在 JSON 里某个字段，而是“提供签名执行时所需的解密材料/目录”。
+- 如果 `OHOS_SIGN_MATERIAL_BASE64` 缺失，CI 会在签名阶段提示 `sign material is missing`，这是因为 hvigor 运行时找不到它所依赖的 `material/` 目录。
+
+## 为什么需要 `OHOS_SIGN_MATERIAL_BASE64`
 
 DevEco/hvigor 在生成并加密 keystore (.p12) 时，会在 .p12 同级生成一个 `material/` 目录，里面包含若干二进制 blob，hvigor 在解密 key/store 密码时需要读取该目录。CI 需要你把该目录打包成 zip 并做 single-line base64，然后放入 `OHOS_SIGN_MATERIAL_BASE64`。否则签名步骤会失败并报 "sign material is missing"。
-
-## 生成并验证 base64 的示例命令
-
-（本节已在 README 中保留，示例步骤用于生成 single-line base64 和验证。你可以参考已有内容。）
 
 ## Secrets 的来源说明（华为后台 / 本地生成）
 
@@ -40,8 +99,6 @@ DevEco/hvigor 在生成并加密 keystore (.p12) 时，会在 .p12 同级生成�
 
 1) 华为开发者后台 / AppGallery Connect / 发布签名侧
 2) 本地 DevEco Studio / 生成 keystore 的机器
-
-下面按每个 Secret 说明其典型来源与获取位置。
 
 ### 1) 来自华为开发者后台 / AppGallery Connect / 发布管理
 #### OHOS_SIGN_CERT_BASE64
@@ -54,7 +111,7 @@ DevEco/hvigor 在生成并加密 keystore (.p12) 时，会在 .p12 同级生成�
 
 #### OHOS_SIGN_ALG
 - 典型来源：证书或签名配置页面中声明的签名算法
-- 常见值举例（示例）：`SHA256withECDSA`（若证书为 ECDSA）或 `SHA256withRSA`（若为 RSA）
+- 常见值举例：`SHA256withECDSA`（若证书为 ECDSA）或 `SHA256withRSA`（若为 RSA）
 
 ### 2) 来自本地 DevEco Studio / 生成 keystore 的机器
 #### OHOS_SIGN_STORE_FILE_BASE64
@@ -71,7 +128,7 @@ DevEco/hvigor 在生成并加密 keystore (.p12) 时，会在 .p12 同级生成�
 
 #### OHOS_SIGN_MATERIAL_BASE64
 - 典型来源：生成 `.p12` 的机器上与 `.p12` 同目录下的 `material/` 目录（由 DevEco/hvigor 生成）
-- 获取方式：必须在生成 `.p12` 的本地环境打包 `material/` 并以受控方式提供（推荐生成���直接在仓库 Secrets 中添加该值或使用内部安全存储与短期凭证）
+- 获取方式：必须在生成 `.p12` 的本地环境打包 `material/` 并以受控方式提供
 
 ### 谁提供这些值
 - 证书管理员 / 发布负责人：负责提供 `OHOS_SIGN_CERT_BASE64`、`OHOS_SIGN_PROFILE_BASE64`、`OHOS_SIGN_ALG`
@@ -80,8 +137,48 @@ DevEco/hvigor 在生成并加密 keystore (.p12) 时，会在 .p12 同级生成�
 
 ### 安全建议
 - `.p12`、`material/`、密码等为高敏感内容，禁止通过公共聊天/邮件明文传输。
-- 建议由生成者直接在仓库 Secrets 中添加或使用公司受控存储与短期凭证供 CI 下载。
+- 建议由生成者直接在仓库 Secrets 中添加或通过公司受控存储与短期凭证供 CI 下载。
 - 不在日志中打印密码或 keystore 内容。
+
+## 生成并验证 base64 的示例命令
+
+### 1) 单个文件生成 single-line base64
+
+Linux:
+
+```bash
+base64 -w0 app.cer > app.cer.base64
+base64 -w0 app.p7b > app.p7b.base64
+base64 -w0 app.p12 > app.p12.base64
+```
+
+macOS:
+
+```bash
+base64 app.cer | tr -d '\n' > app.cer.base64
+base64 app.p7b | tr -d '\n' > app.p7b.base64
+base64 app.p12 | tr -d '\n' > app.p12.base64
+```
+
+### 2) material/ 目录打包并生成 base64
+
+在包含 `material/` 的父目录运行：
+
+```bash
+zip -r material.zip material/
+base64 -w0 material.zip > material.zip.base64  # Linux
+# macOS:
+# base64 material.zip | tr -d '\n' > material.zip.base64
+```
+
+验证：
+
+```bash
+base64 -d material.zip.base64 > tmp_material.zip
+unzip -l tmp_material.zip
+```
+
+输出必须包含以 `material/` 为顶层目录的条目，否则 CI 会报错。
 
 ---
 
