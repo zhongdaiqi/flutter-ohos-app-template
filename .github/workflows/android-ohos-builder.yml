@@ -1,4 +1,4 @@
-name: Build with flutter-ohos-builder
+name: android and ohos Build with flutter-ohos-builder
 
 on:
   push:
