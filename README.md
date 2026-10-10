@@ -142,6 +142,8 @@ DevEco/hvigor 在生成并加密 keystore (.p12) 时，会在 .p12 同级生成�
 
 ## 生成并验证 base64 的示例命令
 
+下面提供 Linux / macOS / Windows 三个平台的示例命令（仅用于本地生成 single-line base64 与验证）。
+
 ### 1) 单个文件生成 single-line base64
 
 Linux:
@@ -160,9 +162,20 @@ base64 app.p7b | tr -d '\n' > app.p7b.base64
 base64 app.p12 | tr -d '\n' > app.p12.base64
 ```
 
+Windows (PowerShell)：
+
+```powershell
+# 生成 single-line base64 文件（示例：app.p12 -> app.p12.base64）
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('app.p12')) | Out-File -Encoding ASCII app.p12.base64
+
+# 另一种：使用 certutil 来解码/编码
+certutil -encodehex app.p12 app.p12.base64 0x40000000  # 0x40000000 表示不分页输出（single-line）
+# 注意：certutil 的行为在不同 Windows 版本略有差异，推荐使用 PowerShell 的 Convert 方法来保证 single-line
+```
+
 ### 2) material/ 目录打包并生成 base64
 
-在包含 `material/` 的父目录运行：
+Linux / macOS:
 
 ```bash
 zip -r material.zip material/
@@ -171,14 +184,56 @@ base64 -w0 material.zip > material.zip.base64  # Linux
 # base64 material.zip | tr -d '\n' > material.zip.base64
 ```
 
-验证：
+Windows (PowerShell)：
+
+```powershell
+# 在 material 的父目录运行，确保 zip 中包含顶层 material/ 目录
+Compress-Archive -Path .\material -DestinationPath material.zip
+# 生成 single-line base64
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('material.zip')) | Out-File -Encoding ASCII material.zip.base64
+```
+
+### 3) 本地解码与验证（查看文件类型 / 列表）
+
+Linux / macOS:
 
 ```bash
+# 解码
+base64 -d app.p12.base64 > tmp_app.p12
+# 查看文件类型
+file tmp_app.p12
+# 如果安装了 openssl，可以查看证书信息（不会导出私钥）
+openssl pkcs12 -in tmp_app.p12 -nokeys -clcerts -passin pass:YOUR_STORE_PASSWORD -nodes -info
+
+# material.zip 验证
 base64 -d material.zip.base64 > tmp_material.zip
 unzip -l tmp_material.zip
 ```
 
-输出必须包含以 `material/` 为顶层目录的条目，否则 CI 会报错。
+Windows (PowerShell / certutil):
+
+```powershell
+# 使用 PowerShell 解码 base64 到文件
+$base64 = Get-Content -Raw app.p12.base64
+[IO.File]::WriteAllBytes('tmp_app.p12', [Convert]::FromBase64String($base64))
+Get-Item tmp_app.p12 | Select-Object Name,Length
+
+# 或使用 certutil 解码
+certutil -decode app.p12.base64 tmp_app.p12
+
+# 若安装了 OpenSSL（例如通过 Git for Windows / WSL），可以查看证书信息：
+# openssl pkcs12 -in tmp_app.p12 -nokeys -clcerts -passin pass:YOUR_STORE_PASSWORD -nodes -info
+
+# material.zip 验证
+$base64 = Get-Content -Raw material.zip.base64
+[IO.File]::WriteAllBytes('tmp_material.zip', [Convert]::FromBase64String($base64))
+Expand-Archive -LiteralPath tmp_material.zip -DestinationPath tmp_material_dir -Force
+Get-ChildItem -Recurse tmp_material_dir | Select-Object FullName,Length
+```
+
+输出校验要点：
+- `tmp_app.p12` 的 `file` / `Get-Item` 类型应该显示为 PKCS#12 / binary 文件，而不是 Zip。若显示为 Zip，说明你可能把 material.zip 的 base64 放错位置到 p12 的 secret。
+- `tmp_material.zip` 解压后应包含顶层 `material/` 目录，并且目录下有若干文件（例如 `material/fd/0`、`material/ac` 等）。
 
 ---
 
