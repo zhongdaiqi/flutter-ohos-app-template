@@ -1,5 +1,10 @@
 # =============================================================================
-# 多阶段：构建 web 产物 + nginx 托管（一键 docker compose up -d）
+# 一键部署：构建 Flutter Web 应用并 nginx 托管
+#
+#   docker compose up -d  → 打开 http://localhost:8080
+#
+# 或者直接拉现成的镜像（无需源码、无需构建）：
+#   docker run -p 8080:80 zhongdaiqi/flutter-ohos-app-template:web-latest
 # =============================================================================
 services:
   web:

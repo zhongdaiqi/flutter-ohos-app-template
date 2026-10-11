@@ -1,16 +1,19 @@
 # =============================================================================
-# 多阶段构建：先用 web 镜像 build 出 build/web/，再用 nginx 托管
+# 部署镜像：即开即用的 Flutter Web 应用（nginx + build/web/）
 #
-# 构建：
+# 安全：最终镜像只有 nginx:alpine + build/web/ 静态文件。
+# 不含 Flutter SDK、entrypoint.sh、签名代码、密钥。
+# 任何下游用户拉取都不会拿到构建凭据。
+#
+# 构建（需源码 + web builder 镜像）：
 #   docker build -f Dockerfile.deploy -t flutter-web-app .
 #
-# 运行：
-#   docker run -p 8080:80 flutter-web-app
-#   或者用 docker-compose（见 docker-compose.yml）
+# 即开即用（拉现成的）：
+#   docker run -p 8080:80 zhongdaiqi/flutter-ohos-app-template:web-latest
 # =============================================================================
 
-# ── Stage 1: 用预构建的 Flutter Web 镜像产出 build/web/ ──────────────────
-FROM zhongdaiqi/flutter-ohos-app-template:web-latest AS builder
+# ── Stage 1: 用 Web Builder 镜像打 Flutter web 产物 ─────────────────────
+FROM zhongdaiqi/flutter-ohos-builder:web-latest AS builder
 
 WORKDIR /workspace
 COPY . .
@@ -23,13 +26,11 @@ RUN /entrypoint.sh \
     --bundle-name com.zhongdaiqi.app \
     --app-name flutter-ohos-app-template
 
-# ── Stage 2: nginx 托管 build/web/ ─────────────────────────────────────────
+# ── Stage 2: nginx 托管（无 SDK、无密钥） ────────────────────────────────
 FROM nginx:alpine
 
-# 把 Flutter web 产物拷进 nginx 默认静态目录
 COPY --from=builder /workspace/build/web /usr/share/nginx/html
 
-# Flutter web 使用 History API 路由，SPA 回退到 index.html
 RUN printf 'server {\n\
     listen       80;\n\
     server_name  localhost;\n\
@@ -38,7 +39,6 @@ RUN printf 'server {\n\
     location / {\n\
         try_files $uri $uri/ /index.html;\n\
     }\n\
-    # 静态资源长缓存（文件名含 hash）\n\
     location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {\n\
         expires 1y;\n\
         add_header Cache-Control "public, immutable";\n\
