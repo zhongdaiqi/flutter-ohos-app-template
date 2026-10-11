@@ -66,6 +66,20 @@ jobs:
         if: always()
         run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log produced)'
 
+      - name: Assert APK is signed with dummy keystore (not Android Debug)
+        if: always()
+        run: |
+          LOG=flutter-ohos-build.log
+          if [ ! -f "$LOG" ]; then echo "FAIL: no build log produced"; exit 1; fi
+          if grep -q "CN=Android Debug" "$LOG"; then
+            echo "FAIL: app-release.apk is STILL signed with the Android Debug certificate (patch_android_signing did not take effect)"; exit 1
+          fi
+          if grep -q "CN=CI Dummy Signing" "$LOG"; then
+            echo "PASS: app-release.apk signed with the dummy keystore -> release signing injection works end-to-end"
+          else
+            echo "FAIL: expected dummy CN not found (build likely failed before apksigner verify)"; exit 1
+          fi
+
       - name: Publish build log to ci-android-sign-check branch
         if: always()
         continue-on-error: true
