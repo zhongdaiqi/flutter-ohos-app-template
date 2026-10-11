@@ -1,0 +1,177 @@
+name: "09. Docker 加速 — OHOS + Android 同时打包"
+
+# =============================================================================
+# 示范：一次触发，两个 job 并行，各用预构建镜像打各自的包
+#
+#   job build-ohos    —— 鸿蒙（.hap 调试包 / .app 正式包）
+#   job build-android —— Android APK（debug / 已签名 release）
+#
+# 两个 job 各自 docker pull 同一个镜像层（runner 上不共享缓存，但同一次
+# workflow 内若复用同一 runner 会命中本地层，实际第二次几乎瞬时）。
+#
+# 镜像 ghcr.io/zhongdaiqi/flutter-ohos-builder:latest 是公共的，无需登录。
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+env:
+  BUILDER_IMAGE: ghcr.io/zhongdaiqi/flutter-ohos-builder:latest
+
+jobs:
+  # ── OHOS ──
+  build-ohos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+
+      - name: Pull prebuilt builder image
+        run: time docker pull "${BUILDER_IMAGE}"
+
+      - name: Build HarmonyOS
+        env:
+          SIGN_ENABLED: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '') && 'true' || 'false' }}
+          OHOS_SIGN_ALG: ${{ secrets.OHOS_SIGN_ALG || 'SHA256withECDSA' }}
+          OHOS_SIGN_KEY_ALIAS: ${{ secrets.OHOS_SIGN_KEY_ALIAS }}
+          OHOS_SIGN_KEY_PASSWORD: ${{ secrets.OHOS_SIGN_KEY_PASSWORD }}
+          OHOS_SIGN_STORE_PASSWORD: ${{ secrets.OHOS_SIGN_STORE_PASSWORD }}
+          OHOS_SIGN_CERT_BASE64: ${{ secrets.OHOS_SIGN_CERT_BASE64 }}
+          OHOS_SIGN_PROFILE_BASE64: ${{ secrets.OHOS_SIGN_PROFILE_BASE64 }}
+          OHOS_SIGN_STORE_FILE_BASE64: ${{ secrets.OHOS_SIGN_STORE_FILE_BASE64 }}
+          OHOS_SIGN_MATERIAL_BASE64: ${{ secrets.OHOS_SIGN_MATERIAL_BASE64 }}
+        run: |
+          START=$(date +%s)
+          if [[ "${SIGN_ENABLED}" == "true" ]]; then
+            TARGET=app; MODE=release
+          else
+            TARGET=hap; MODE=debug
+          fi
+          echo "build-target=${TARGET} build-mode=${MODE}"
+
+          ARGS=(
+            --flutter-version 3.41.10-ohos-1.0.1
+            --ohos-api 26
+            --bundle-name com.zhongdaiqi.app
+            --app-name flutter-ohos-app-template
+            --build-target "${TARGET}"
+            --build-mode "${MODE}"
+            --ohos-sign-enabled "${SIGN_ENABLED}"
+          )
+          if [[ "${SIGN_ENABLED}" == "true" ]]; then
+            ARGS+=(
+              --ohos-sign-alg "${OHOS_SIGN_ALG}"
+              --ohos-sign-key-alias "${OHOS_SIGN_KEY_ALIAS}"
+              --ohos-sign-key-password "${OHOS_SIGN_KEY_PASSWORD}"
+              --ohos-sign-store-password "${OHOS_SIGN_STORE_PASSWORD}"
+              --ohos-sign-cert-base64 "${OHOS_SIGN_CERT_BASE64}"
+              --ohos-sign-profile-base64 "${OHOS_SIGN_PROFILE_BASE64}"
+              --ohos-sign-store-file-base64 "${OHOS_SIGN_STORE_FILE_BASE64}"
+              --ohos-sign-material-base64 "${OHOS_SIGN_MATERIAL_BASE64}"
+            )
+          fi
+
+          docker run --rm \
+            -v "$(pwd):/workspace" \
+            -w /workspace \
+            "${BUILDER_IMAGE}" "${ARGS[@]}"
+
+          echo "build wall time: $(( $(date +%s) - START ))s"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-ohos-package
+          path: |
+            ohos/entry/build/default/outputs/default/*.hap
+            ohos/build/outputs/default/*.app
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ── Android ──
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+
+      - name: Pull prebuilt builder image
+        run: time docker pull "${BUILDER_IMAGE}"
+
+      - name: Build Android
+        env:
+          SIGN_ENABLED: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'true' || 'false' }}
+          ANDROID_SIGN_KEY_ALIAS: ${{ secrets.ANDROID_SIGN_KEY_ALIAS }}
+          ANDROID_SIGN_KEY_PASSWORD: ${{ secrets.ANDROID_SIGN_KEY_PASSWORD }}
+          ANDROID_SIGN_STORE_BASE64: ${{ secrets.ANDROID_STORE_BASE64 }}
+          ANDROID_SIGN_STORE_PASSWORD: ${{ secrets.ANDROID_SIGN_STORE_PASSWORD }}
+        run: |
+          START=$(date +%s)
+          if [[ "${SIGN_ENABLED}" == "true" ]]; then
+            MODE=release
+          else
+            MODE=debug
+          fi
+          echo "build-target=android build-mode=${MODE}"
+
+          ARGS=(
+            --flutter-version 3.41.10-ohos-1.0.1
+            --ohos-api 26
+            --bundle-name com.zhongdaiqi.app
+            --app-name flutter-ohos-app-template
+            --build-target android
+            --build-mode "${MODE}"
+            --android-sign-enabled "${SIGN_ENABLED}"
+          )
+          if [[ "${SIGN_ENABLED}" == "true" ]]; then
+            ARGS+=(
+              --android-sign-key-alias "${ANDROID_SIGN_KEY_ALIAS}"
+              --android-sign-key-password "${ANDROID_SIGN_KEY_PASSWORD}"
+              --android-sign-store-base64 "${ANDROID_SIGN_STORE_BASE64}"
+              --android-sign-store-password "${ANDROID_SIGN_STORE_PASSWORD}"
+            )
+          fi
+
+          docker run --rm \
+            -v "$(pwd):/workspace" \
+            -w /workspace \
+            "${BUILDER_IMAGE}" "${ARGS[@]}"
+
+          echo "build wall time: $(( $(date +%s) - START ))s"
+
+      - name: Verify APK signature
+        if: success()
+        run: |
+          LOG=flutter-ohos-build.log
+          if grep -q "apksigner verify: OK" "$LOG" 2>/dev/null \
+             && ! grep -q "Android Debug" "$LOG" 2>/dev/null; then
+            echo "PASS: APK signed with the configured keystore"
+            grep "Signer #" "$LOG" || true
+          elif grep -q "Android Debug" "$LOG" 2>/dev/null; then
+            echo "INFO: signed with Android Debug (no real keystore configured)"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-android-package
+          path: |
+            build/app/outputs/flutter-apk/**/*.apk
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7
