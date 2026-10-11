@@ -1,0 +1,11 @@
+# =============================================================================
+# 多阶段：构建 web 产物 + nginx 托管（一键 docker compose up -d）
+# =============================================================================
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.deploy
+    ports:
+      - "8080:80"
+    restart: unless-stopped

@@ -1,0 +1,49 @@
+# =============================================================================
+# 多阶段构建：先用 web 镜像 build 出 build/web/，再用 nginx 托管
+#
+# 构建：
+#   docker build -f Dockerfile.deploy -t flutter-web-app .
+#
+# 运行：
+#   docker run -p 8080:80 flutter-web-app
+#   或者用 docker-compose（见 docker-compose.yml）
+# =============================================================================
+
+# ── Stage 1: 用预构建的 Flutter Web 镜像产出 build/web/ ──────────────────
+FROM zhongdaiqi/flutter-ohos-app-template:web-latest AS builder
+
+WORKDIR /workspace
+COPY . .
+
+RUN /entrypoint.sh \
+    --flutter-version 3.41.10-ohos-1.0.1 \
+    --ohos-api 26 \
+    --build-target web \
+    --build-mode release \
+    --bundle-name com.zhongdaiqi.app \
+    --app-name flutter-ohos-app-template
+
+# ── Stage 2: nginx 托管 build/web/ ─────────────────────────────────────────
+FROM nginx:alpine
+
+# 把 Flutter web 产物拷进 nginx 默认静态目录
+COPY --from=builder /workspace/build/web /usr/share/nginx/html
+
+# Flutter web 使用 History API 路由，SPA 回退到 index.html
+RUN printf 'server {\n\
+    listen       80;\n\
+    server_name  localhost;\n\
+    root         /usr/share/nginx/html;\n\
+    index        index.html;\n\
+    location / {\n\
+        try_files $uri $uri/ /index.html;\n\
+    }\n\
+    # 静态资源长缓存（文件名含 hash）\n\
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {\n\
+        expires 1y;\n\
+        add_header Cache-Control "public, immutable";\n\
+    }\n\
+}\n' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
