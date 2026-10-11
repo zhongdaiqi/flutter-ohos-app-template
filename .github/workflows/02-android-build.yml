@@ -1,0 +1,77 @@
+name: "02. Android 打包"
+
+# =============================================================================
+# 示范：使用 flutter-ohos-builder 单独打包 Android APK
+#
+# - 如果配置了 Android 签名 secret → 打 release APK（已正式签名）
+# - 如果没有配置签名 secret → 打 debug APK（Android Debug 自签）
+#
+# 需在仓库 Settings → Secrets and variables → Actions 中配置：
+#   - ANDROID_STORE_BASE64      （.jks 密钥库文件 Base64）
+#   - ANDROID_SIGN_KEY_ALIAS
+#   - ANDROID_SIGN_KEY_PASSWORD
+#   - ANDROID_SIGN_STORE_PASSWORD
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Build Android
+        uses: zhongdaiqi/flutter-ohos-builder@main
+        with:
+          flutter-version: '3.41.10-ohos-1.0.1'
+          ohos-api: '26'
+          bundle-name: 'com.zhongdaiqi.app'
+          app-name: 'flutter-ohos-app-template'
+
+          build-target: 'android'
+
+          # 有签名 secret → release；无 → debug
+          build-mode: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'release' || 'debug' }}
+
+          # Android 签名（可选；不配就用 Android Debug 自签）
+          android-sign-enabled: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'true' || 'false' }}
+          android-sign-key-alias: ${{ secrets.ANDROID_SIGN_KEY_ALIAS }}
+          android-sign-key-password: ${{ secrets.ANDROID_SIGN_KEY_PASSWORD }}
+          android-sign-store-base64: ${{ secrets.ANDROID_STORE_BASE64 }}
+          android-sign-store-password: ${{ secrets.ANDROID_SIGN_STORE_PASSWORD }}
+
+      - name: Show build log
+        if: always()
+        run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log)'
+
+      - name: Verify APK signature (if release mode)
+        if: success()
+        run: |
+          LOG=flutter-ohos-build.log
+          if ! grep -q "Android Debug" "$LOG" 2>/dev/null && grep -q "apksigner verify: OK" "$LOG" 2>/dev/null; then
+            echo "PASS: APK is signed with the configured keystore"
+            grep "Signer #" "$LOG" | head -2
+          elif grep -q "Android Debug" "$LOG" 2>/dev/null; then
+            echo "INFO: APK is signed with Android Debug certificate (no real keystore configured)"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-package
+          path: |
+            build/app/outputs/flutter-apk/**/*.apk
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7
