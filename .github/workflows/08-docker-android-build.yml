@@ -11,7 +11,7 @@ name: "08. Docker 加速 — Android 打包"
 # 镜像 ghcr.io/zhongdaiqi/flutter-ohos-builder:latest 是公共的，无需登录。
 #
 # 可选：配置 Android 签名 secret 后自动升级为已正式签名的 release APK
-#   ANDROID_STORE_BASE64 (.jks) / ANDROID_SIGN_KEY_ALIAS
+#   ANDROID_SIGN_STORE_BASE64 (.jks) / ANDROID_SIGN_KEY_ALIAS
 #   ANDROID_SIGN_KEY_PASSWORD / ANDROID_SIGN_STORE_PASSWORD
 # =============================================================================
 

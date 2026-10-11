@@ -7,7 +7,7 @@ name: "02. Android 打包"
 # - 如果没有配置签名 secret → 打 debug APK（Android Debug 自签）
 #
 # 需在仓库 Settings → Secrets and variables → Actions 中配置：
-#   - ANDROID_STORE_BASE64      （.jks 密钥库文件 Base64）
+#   - ANDROID_SIGN_STORE_BASE64 （.jks 密钥库文件 Base64）
 #   - ANDROID_SIGN_KEY_ALIAS
 #   - ANDROID_SIGN_KEY_PASSWORD
 #   - ANDROID_SIGN_STORE_PASSWORD
