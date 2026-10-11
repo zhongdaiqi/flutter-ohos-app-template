@@ -43,12 +43,41 @@ jobs:
           docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' \
             | grep flutter-ohos-builder || true
 
-      - name: Build Android
+      # Why this exists: GitHub renders an unknown secret as an EMPTY STRING
+      # rather than erroring, so a renamed/deleted secret silently downgrades
+      # the build to an unsigned debug APK with no warning anywhere. Print
+      # lengths only (never values) so a missing secret is obvious at a glance.
+      - name: Check Android signing secrets
         env:
-          SIGN_ENABLED: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'true' || 'false' }}
           ANDROID_SIGN_KEY_ALIAS: ${{ secrets.ANDROID_SIGN_KEY_ALIAS }}
           ANDROID_SIGN_KEY_PASSWORD: ${{ secrets.ANDROID_SIGN_KEY_PASSWORD }}
-          ANDROID_SIGN_STORE_BASE64: ${{ secrets.ANDROID_STORE_BASE64 }}
+          ANDROID_SIGN_STORE_BASE64: ${{ secrets.ANDROID_SIGN_STORE_BASE64 }}
+          ANDROID_SIGN_STORE_PASSWORD: ${{ secrets.ANDROID_SIGN_STORE_PASSWORD }}
+        run: |
+          echo "Android signing secrets (lengths only, values never printed):"
+          MISSING=0
+          for v in ANDROID_SIGN_KEY_ALIAS ANDROID_SIGN_KEY_PASSWORD \
+                   ANDROID_SIGN_STORE_BASE64 ANDROID_SIGN_STORE_PASSWORD; do
+            val="${!v}"
+            if [[ -z "${val}" ]]; then
+              printf '  %-30s MISSING\n' "${v}"
+              MISSING=1
+            else
+              printf '  %-30s present (%d chars)\n' "${v}" "${#val}"
+            fi
+          done
+          if [[ "${MISSING}" == "1" ]]; then
+            echo ">> signing secrets incomplete -> this run will build a DEBUG/unsigned APK"
+          else
+            echo ">> all signing secrets present -> this run will build a SIGNED release APK"
+          fi
+
+      - name: Build Android
+        env:
+          SIGN_ENABLED: ${{ (secrets.ANDROID_SIGN_STORE_BASE64 != '') && 'true' || 'false' }}
+          ANDROID_SIGN_KEY_ALIAS: ${{ secrets.ANDROID_SIGN_KEY_ALIAS }}
+          ANDROID_SIGN_KEY_PASSWORD: ${{ secrets.ANDROID_SIGN_KEY_PASSWORD }}
+          ANDROID_SIGN_STORE_BASE64: ${{ secrets.ANDROID_SIGN_STORE_BASE64 }}
           ANDROID_SIGN_STORE_PASSWORD: ${{ secrets.ANDROID_SIGN_STORE_PASSWORD }}
         run: |
           START=$(date +%s)

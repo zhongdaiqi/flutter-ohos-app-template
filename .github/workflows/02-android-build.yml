@@ -30,6 +30,35 @@ jobs:
                       /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
           df -h /
 
+      # Why this exists: GitHub renders an unknown secret as an EMPTY STRING
+      # rather than erroring, so a renamed/deleted secret silently downgrades
+      # the build to an unsigned debug APK with no warning anywhere. Print
+      # lengths only (never values) so a missing secret is obvious at a glance.
+      - name: Check Android signing secrets
+        env:
+          ANDROID_SIGN_KEY_ALIAS: ${{ secrets.ANDROID_SIGN_KEY_ALIAS }}
+          ANDROID_SIGN_KEY_PASSWORD: ${{ secrets.ANDROID_SIGN_KEY_PASSWORD }}
+          ANDROID_SIGN_STORE_BASE64: ${{ secrets.ANDROID_SIGN_STORE_BASE64 }}
+          ANDROID_SIGN_STORE_PASSWORD: ${{ secrets.ANDROID_SIGN_STORE_PASSWORD }}
+        run: |
+          echo "Android signing secrets (lengths only, values never printed):"
+          MISSING=0
+          for v in ANDROID_SIGN_KEY_ALIAS ANDROID_SIGN_KEY_PASSWORD \
+                   ANDROID_SIGN_STORE_BASE64 ANDROID_SIGN_STORE_PASSWORD; do
+            val="${!v}"
+            if [[ -z "${val}" ]]; then
+              printf '  %-30s MISSING\n' "${v}"
+              MISSING=1
+            else
+              printf '  %-30s present (%d chars)\n' "${v}" "${#val}"
+            fi
+          done
+          if [[ "${MISSING}" == "1" ]]; then
+            echo ">> signing secrets incomplete -> this run will build a DEBUG/unsigned APK"
+          else
+            echo ">> all signing secrets present -> this run will build a SIGNED release APK"
+          fi
+
       - name: Build Android
         uses: zhongdaiqi/flutter-ohos-builder@main
         with:
@@ -41,13 +70,13 @@ jobs:
           build-target: 'android'
 
           # 有签名 secret → release；无 → debug
-          build-mode: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'release' || 'debug' }}
+          build-mode: ${{ (secrets.ANDROID_SIGN_STORE_BASE64 != '') && 'release' || 'debug' }}
 
           # Android 签名（可选；不配就用 Android Debug 自签）
-          android-sign-enabled: ${{ (secrets.ANDROID_STORE_BASE64 != '') && 'true' || 'false' }}
+          android-sign-enabled: ${{ (secrets.ANDROID_SIGN_STORE_BASE64 != '') && 'true' || 'false' }}
           android-sign-key-alias: ${{ secrets.ANDROID_SIGN_KEY_ALIAS }}
           android-sign-key-password: ${{ secrets.ANDROID_SIGN_KEY_PASSWORD }}
-          android-sign-store-base64: ${{ secrets.ANDROID_STORE_BASE64 }}
+          android-sign-store-base64: ${{ secrets.ANDROID_SIGN_STORE_BASE64 }}
           android-sign-store-password: ${{ secrets.ANDROID_SIGN_STORE_PASSWORD }}
 
       - name: Show build log
