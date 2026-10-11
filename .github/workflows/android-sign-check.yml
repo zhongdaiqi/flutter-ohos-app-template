@@ -1,0 +1,79 @@
+name: Android Signing Check (dummy keystore)
+
+# End-to-end verification of the Android release-signing path in
+# zhongdaiqi/flutter-ohos-builder without needing any real keystore secret.
+# A dummy keystore is generated on the runner with `keytool` (CN=CI Dummy
+# Signing) and fed to the builder as android-sign-store-base64. If the builder's
+# patch_android_signing() works, `apksigner verify --print-certs` in the build
+# log will show "CN=CI Dummy Signing..." instead of "CN=Android Debug".
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/android-sign-check.yml'
+
+jobs:
+  android-sign-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write          # publish build log to ci-diagnostics
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Generate dummy Android keystore (no real credentials needed)
+        id: ks
+        run: |
+          KEYPW="dummypass123"
+          ALIAS="ci-dummy"
+          STORE=/tmp/android-dummy.jks
+          # GitHub ubuntu runners ship a JDK, so keytool is on PATH.
+          keytool -genkeypair -v \
+            -keystore "$STORE" \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias "$ALIAS" \
+            -dname "CN=CI Dummy Signing, OU=flutter-ohos-builder, O=ci-test, L=Beijing, ST=Beijing, C=CN" \
+            -storepass "$KEYPW" -keypass "$KEYPW" -noprompt
+          echo "store_b64=$(base64 -w0 "$STORE")" >> "$GITHUB_OUTPUT"
+          echo "alias=$ALIAS" >> "$GITHUB_OUTPUT"
+          echo "keypass=$KEYPW" >> "$GITHUB_OUTPUT"
+          echo "storepass=$KEYPW" >> "$GITHUB_OUTPUT"
+
+      - name: Build Android (release, signed with dummy keystore)
+        id: build
+        uses: zhongdaiqi/flutter-ohos-builder@main
+        with:
+          flutter-version: '3.41.10-ohos-1.0.1'
+          ohos-api: '26'
+          build-target: 'android'
+          build-mode: 'release'
+          android-sign-enabled: 'true'
+          android-sign-key-alias: ${{ steps.ks.outputs.alias }}
+          android-sign-key-password: ${{ steps.ks.outputs.keypass }}
+          android-sign-store-password: ${{ steps.ks.outputs.storepass }}
+          android-sign-store-base64: ${{ steps.ks.outputs.store_b64 }}
+
+      - name: Show build log
+        if: always()
+        run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log produced)'
+
+      - name: Publish build log to ci-diagnostics branch
+        if: always()
+        continue-on-error: true
+        run: |
+          git config user.name  "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          mkdir -p .ci
+          cp flutter-ohos-build.log .ci/android-sign-check.log 2>/dev/null || echo '(no build log produced)' > .ci/android-sign-check.log
+          git add -f .ci/android-sign-check.log
+          git commit -m "ci: android sign check log for ${GITHUB_SHA}" || echo "nothing to commit"
+          git push origin HEAD:refs/heads/ci-diagnostics --force
