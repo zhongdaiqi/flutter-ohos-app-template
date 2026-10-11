@@ -1,0 +1,68 @@
+name: "00. Default — OHOS 打包（自动触发）"
+
+# =============================================================================
+# 默认 workflow：每次 push / PR 自动构建鸿蒙 debug .hap
+#
+# 这是你 clone 模板后第一个会看到的 CI —— 无需配置任何 secret，
+# 提交即触发，快速验证项目能正常构建。
+#
+# 签名 secret 配好后会自动升级为 release .app（正式签名包）。
+# =============================================================================
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-ohos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Build HarmonyOS
+        uses: zhongdaiqi/flutter-ohos-builder@main
+        with:
+          flutter-version: '3.41.10-ohos-1.0.1'
+          ohos-api: '26'
+          bundle-name: 'com.zhongdaiqi.app'
+          app-name: 'flutter-ohos-app-template'
+
+          build-target: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '') && 'app' || 'hap' }}
+          build-mode: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '') && 'release' || 'debug' }}
+
+          ohos-sign-enabled: ${{ (secrets.OHOS_SIGN_STORE_FILE_BASE64 != '') && 'true' || 'false' }}
+          ohos-sign-alg: ${{ secrets.OHOS_SIGN_ALG || 'SHA256withECDSA' }}
+          ohos-sign-key-alias: ${{ secrets.OHOS_SIGN_KEY_ALIAS }}
+          ohos-sign-key-password: ${{ secrets.OHOS_SIGN_KEY_PASSWORD }}
+          ohos-sign-store-password: ${{ secrets.OHOS_SIGN_STORE_PASSWORD }}
+          ohos-sign-cert-base64: ${{ secrets.OHOS_SIGN_CERT_BASE64 }}
+          ohos-sign-profile-base64: ${{ secrets.OHOS_SIGN_PROFILE_BASE64 }}
+          ohos-sign-store-file-base64: ${{ secrets.OHOS_SIGN_STORE_FILE_BASE64 }}
+          ohos-sign-material-base64: ${{ secrets.OHOS_SIGN_MATERIAL_BASE64 }}
+
+      - name: Show build log
+        if: always()
+        run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log)'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ohos-package
+          path: |
+            ohos/entry/build/default/outputs/default/*.hap
+            ohos/build/outputs/default/*.app
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7
