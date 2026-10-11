@@ -13,6 +13,9 @@
 # =============================================================================
 
 # ── Stage 1: 用 Web Builder 镜像打 Flutter web 产物 ─────────────────────
+# 浮动 tag 在这是可接受的：web builder 不执行任何签名代码路径。
+# 需要可复现构建时改成 :web-<sha>。
+# 配合 .dockerignore 使用 —— 否则 `COPY . .` 会把 .git 和本地签名文件一起拖进来。
 FROM zhongdaiqi/flutter-ohos-builder:web-latest AS builder
 
 WORKDIR /workspace

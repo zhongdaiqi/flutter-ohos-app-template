@@ -1,0 +1,44 @@
+# Keep the Docker build context to exactly what `flutter build web` needs.
+#
+# Dockerfile.deploy does `COPY . .` into the builder stage. Without this file that
+# also copies .git/ (full commit history) and, after a local build, any signing
+# material that happens to sit in the tree. The final image only takes build/web,
+# so nothing leaks TODAY - but the moment someone adds `cache-to: type=registry`
+# (the usual way to speed this up) the builder stage gets pushed to the registry
+# and everything below becomes publicly pullable.
+.git
+.github
+.idea
+.vscode
+.DS_Store
+
+# Build outputs
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Generated platform folders (produced inside the image by `flutter create`)
+android/
+ohos/
+
+# Signing material - never send these to the daemon, let alone into a layer.
+# (android/key.properties carries plaintext storePassword/keyPassword, and
+#  ohos/build-profile.json5 carries the OHOS hvigor passwords.)
+android/key.properties
+ohos/build-profile.json5
+*.jks
+*.p12
+*.pfx
+*.keystore
+
+# Build logs
+flutter-ohos-build.log
+
+# Not needed to build the app
+README.md
+LICENSE
+docker-compose.yml
+deploy/
+Dockerfile.deploy
+Dockerfile

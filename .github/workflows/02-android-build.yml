@@ -60,7 +60,7 @@ jobs:
           fi
 
       - name: Build Android
-        uses: zhongdaiqi/flutter-ohos-builder@main
+        uses: zhongdaiqi/flutter-ohos-builder@v1.4
         with:
           flutter-version: '3.41.10-ohos-1.0.1'
           ohos-api: '26'

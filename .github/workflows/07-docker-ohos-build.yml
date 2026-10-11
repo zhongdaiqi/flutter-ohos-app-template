@@ -4,7 +4,7 @@ name: "07. Docker 加速 — OHOS 打包"
 # 示范：用预构建的 GHCR builder 镜像打包鸿蒙（HarmonyOS）
 #
 # 与 01. OHOS 打包 的区别只在于"构建环境从哪来"：
-#   01 —— uses: zhongdaiqi/flutter-ohos-builder@main
+#   01 —— uses: zhongdaiqi/flutter-ohos-builder@v1.4
 #          Docker Action 每次 CI 现场重建 ~8 GB 镜像，实测 7.3~8.8 分钟
 #   07 —— docker pull 预构建镜像 + docker run
 #          镜像已含 OHOS SDK / Flutter / JDK，直接拉下来就构建
@@ -20,7 +20,10 @@ on:
   workflow_dispatch:
 
 env:
-  BUILDER_IMAGE: ghcr.io/zhongdaiqi/flutter-ohos-builder:latest
+  # Pinned to a release tag, not :latest. A floating tag means the next push to the
+  # builder repo silently changes what executes here - and this container is handed
+  # the OHOS signing passwords on its command line. Bump deliberately.
+  BUILDER_IMAGE: ghcr.io/zhongdaiqi/flutter-ohos-builder:v1.4
 
 jobs:
   build-ohos:
@@ -29,16 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free disk space
-        run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
-          sudo docker image prune -af || true
-          df -h /
+      # No "Free disk space" step here on purpose: this workflow only PULLS and runs a
+      # prebuilt image, it never builds one - so the `sudo docker image prune -af` of
+      # that step burns ~60s and wipes the runner's image cache for no benefit.
+      # (01 keeps it: `uses:` really does build the ~8 GB image on the runner.)
 
       - name: Pull prebuilt builder image
         run: |
+          df -h /
           echo "pulling ${BUILDER_IMAGE} ..."
           time docker pull "${BUILDER_IMAGE}"
           docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' \
