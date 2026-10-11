@@ -17,6 +17,12 @@ name: "03. OHOS + Android + Web 同时打包"
 on:
   workflow_dispatch:
 
+# Least privilege: this workflow only reads the repo and uploads artifacts.
+# Without an explicit block it inherits the repository default, which is often
+# read/write for everything - a much bigger blast radius than it needs.
+permissions:
+  contents: read
+
 jobs:
   # ── 鸿蒙 ──
   build-ohos:

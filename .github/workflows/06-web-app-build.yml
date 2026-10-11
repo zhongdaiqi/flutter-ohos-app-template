@@ -25,6 +25,12 @@ name: "06. Web 应用镜像构建与推送"
 on:
   workflow_dispatch:
 
+# Least privilege: this workflow only reads the repo and uploads artifacts.
+# Without an explicit block it inherits the repository default, which is often
+# read/write for everything - a much bigger blast radius than it needs.
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest

@@ -23,7 +23,17 @@ env:
   # Pinned to a release tag, not :latest. A floating tag means the next push to the
   # builder repo silently changes what executes here - and this container is handed
   # the OHOS signing passwords on its command line. Bump deliberately.
+  #
+  # NOTE: the container runs as root, so whatever it writes into the mounted workspace
+  # (ohos/, build/, flutter-ohos-build.log) comes out owned by root. Harmless in CI;
+  # if you run this locally, `sudo chown -R "$USER" .` afterwards.
   BUILDER_IMAGE: ghcr.io/zhongdaiqi/flutter-ohos-builder:v1.4
+
+# Least privilege: this workflow only reads the repo and uploads artifacts.
+# Without an explicit block it inherits the repository default, which is often
+# read/write for everything - a much bigger blast radius than it needs.
+permissions:
+  contents: read
 
 jobs:
   build-ohos:
