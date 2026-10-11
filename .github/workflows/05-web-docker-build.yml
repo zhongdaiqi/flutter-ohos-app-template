@@ -1,0 +1,51 @@
+name: "05. Web Docker 镜像构建与推送"
+
+# =============================================================================
+# 从 flutter-ohos-builder 仓库的 Dockerfile.web 构建轻量级 Flutter Web
+# 镜像，并推送到 Docker Hub。
+#
+# Web 镜像约 1 GB（不含 OHOS SDK ~6.75 GB + Android SDK ~2 GB），
+# 比完整的 flutter-ohos-builder 镜像小得多，web 构建速度也更快。
+#
+# 需在 Settings → Secrets → Actions 中配置：
+#   - DOCKERHUB_USERNAME
+#   - DOCKERHUB_TOKEN
+#   - WEB_DOCKER_REPOSITORY  （默认 zhongdaiqi/flutter-ohos-app-template）
+# =============================================================================
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/05-web-docker-build.yml'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout flutter-ohos-builder (contains Dockerfile.web)
+        uses: actions/checkout@v4
+        with:
+          repository: zhongdaiqi/flutter-ohos-builder
+          ref: main
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.web
+          push: true
+          tags: |
+            ${{ secrets.WEB_DOCKER_REPOSITORY || 'zhongdaiqi/flutter-ohos-app-template' }}:web-latest
+            ${{ secrets.WEB_DOCKER_REPOSITORY || 'zhongdaiqi/flutter-ohos-app-template' }}:web-${{ github.sha }}
