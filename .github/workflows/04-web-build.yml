@@ -1,0 +1,46 @@
+name: "04. Web 打包"
+
+# =============================================================================
+# 示范：使用 flutter-ohos-builder 单独打包 Web
+#
+# 产出 build/web/ 目录，可直接部署到任意静态托管（GitHub Pages、
+# Cloudflare Pages、Vercel、Nginx 等）。
+#
+# 无需配置任何 secret。
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Web
+        uses: zhongdaiqi/flutter-ohos-builder@main
+        with:
+          flutter-version: '3.41.10-ohos-1.0.1'
+          ohos-api: '26'
+          bundle-name: 'com.zhongdaiqi.app'
+          app-name: 'flutter-ohos-app-template'
+
+          build-target: 'web'
+          build-mode: 'release'
+
+      - name: Show build log
+        if: always()
+        run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log)'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-package
+          path: |
+            build/web/**
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7

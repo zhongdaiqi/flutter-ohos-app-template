@@ -1,15 +1,17 @@
-name: "03. OHOS + Android 同时打包"
+name: "03. OHOS + Android + Web 同时打包"
 
 # =============================================================================
-# 示范：使用 flutter-ohos-builder 同时打包鸿蒙与 Android
+# 示范：使用 flutter-ohos-builder 同时打包鸿蒙、Android 与 Web
 #
-# 两个构建 job 并行执行，互不干扰：
+# 三个构建 job 并行执行，互不干扰：
 #   - build-ohos    → 产出 .hap 或 .app
 #   - build-android → 产出 .apk
+#   - build-web     → 产出 build/web/
 #
 # 需在仓库 Settings → Secrets and variables → Actions 中配置：
 #   OHOS 签名（见 01-ohos-build.yml 注释）
 #   Android 签名（见 02-android-build.yml 注释）
+#   Web 无需任何 secret
 # =============================================================================
 
 on:
@@ -109,6 +111,39 @@ jobs:
           name: android-package
           path: |
             build/app/outputs/flutter-apk/**/*.apk
+            flutter-ohos-build.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ── Web ──
+  build-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Web
+        uses: zhongdaiqi/flutter-ohos-builder@main
+        with:
+          flutter-version: '3.41.10-ohos-1.0.1'
+          ohos-api: '26'
+          bundle-name: 'com.zhongdaiqi.app'
+          app-name: 'flutter-ohos-app-template'
+
+          build-target: 'web'
+          build-mode: 'release'
+
+      - name: Show build log
+        if: always()
+        run: cat flutter-ohos-build.log 2>/dev/null || echo '(no build log)'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-package
+          path: |
+            build/web/**
             flutter-ohos-build.log
           if-no-files-found: warn
           retention-days: 7
